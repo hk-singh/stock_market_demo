@@ -1,0 +1,4 @@
+kafka-python==2.3.0
+python-dotenv==1.2.1
+python-snappy==0.7.3
+pandas==2.3.3
