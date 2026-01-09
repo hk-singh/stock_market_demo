@@ -11,6 +11,8 @@ services:
     volumes:
       - zookeeper-data:/var/lib/zookeeper/data
       - zookeeper-logs:/var/lib/zookeeper/log
+    networks:
+      - kafka-network
 
   kafka:
     image: confluentinc/cp-kafka:7.5.0
@@ -35,6 +37,13 @@ services:
       KAFKA_JMX_HOSTNAME: localhost
     volumes:
       - kafka-data:/var/lib/kafka/data
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
 
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -48,8 +57,80 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
       KAFKA_CLUSTERS_0_ZOOKEEPER: zookeeper:2181
       DYNAMIC_CONFIG_ENABLED: 'true'
+    networks:
+      - kafka-network
+
+  # Producer service
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    container_name: finnhub-producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    networks:
+      - kafka-network
+    restart: unless-stopped
+
+  # Simple consumer
+  simple-consumer:
+    build:
+      context: ./consumers
+      dockerfile: Dockerfile
+    container_name: simple-consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    command: ["python", "simple_consumer.py"]
+    networks:
+      - kafka-network
+    restart: unless-stopped
+
+  # Aggregator consumer
+  aggregator-consumer:
+    build:
+      context: ./consumers
+      dockerfile: Dockerfile
+    container_name: aggregator-consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    command: ["python", "aggregator_consumer.py"]
+    networks:
+      - kafka-network
+    restart: unless-stopped
+
+  # Storage consumer
+  storage-consumer:
+    build:
+      context: ./consumers
+      dockerfile: Dockerfile
+    container_name: storage-consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    command: ["python", "storage_consumer.py"]
+    volumes:
+      - ./consumers/data:/app/data
+    networks:
+      - kafka-network
+    restart: unless-stopped
 
 volumes:
   zookeeper-data:
   zookeeper-logs:
   kafka-data:
+
+networks:
+  kafka-network:
+    driver: bridge
