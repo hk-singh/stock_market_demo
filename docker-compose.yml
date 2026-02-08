@@ -146,10 +146,80 @@ services:
       timeout: 5s
       retries: 3
 
+  # PostgreSQL database
+  postgres:
+    image: postgres:16-alpine
+    container_name: stockmarket-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: stockmarket
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - kafka-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # DB Writer consumer — writes Kafka messages to PostgreSQL
+  db-consumer:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: db-consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/stockmarket
+    command: >
+      sh -c "python -m alembic upgrade head && python -m api.db_consumer"
+    networks:
+      - kafka-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8004/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # FastAPI REST + WebSocket service
+  api:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: stockmarket-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      db-consumer:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/stockmarket
+    ports:
+      - "8005:8005"
+    networks:
+      - kafka-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8005/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
 volumes:
   zookeeper-data:
   zookeeper-logs:
   kafka-data:
+  postgres-data:
 
 networks:
   kafka-network:
