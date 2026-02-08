@@ -63,8 +63,8 @@ services:
   # Producer service
   producer:
     build:
-      context: ./producer
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: producer/Dockerfile
     container_name: finnhub-producer
     depends_on:
       kafka:
@@ -75,12 +75,17 @@ services:
     networks:
       - kafka-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   # Simple consumer
   simple-consumer:
     build:
-      context: ./consumers
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: consumers/Dockerfile
     container_name: simple-consumer
     depends_on:
       kafka:
@@ -91,12 +96,17 @@ services:
     networks:
       - kafka-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8001/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   # Aggregator consumer
   aggregator-consumer:
     build:
-      context: ./consumers
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: consumers/Dockerfile
     container_name: aggregator-consumer
     depends_on:
       kafka:
@@ -107,12 +117,17 @@ services:
     networks:
       - kafka-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8002/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   # Storage consumer
   storage-consumer:
     build:
-      context: ./consumers
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: consumers/Dockerfile
     container_name: storage-consumer
     depends_on:
       kafka:
@@ -125,6 +140,11 @@ services:
     networks:
       - kafka-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8003/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
 volumes:
   zookeeper-data:

@@ -1,14 +1,18 @@
+import json
 import os
 import signal
 import sys
-import json
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import logging
+from collections import defaultdict
+from datetime import datetime
+
+from dotenv import load_dotenv
 from kafka import KafkaConsumer, KafkaProducer
 from kafka.errors import KafkaError
-from dotenv import load_dotenv
-import logging
-from datetime import datetime
-from collections import defaultdict
-from typing import Dict, List
+
+from shared.healthcheck import start_health_server
 
 logging.basicConfig(
     level=logging.INFO,
@@ -54,7 +58,7 @@ class TradeAggregator:
         if len(self.trades[symbol]) > self.window_size:
             self.trades[symbol].pop(0)
 
-    def calculate_metrics(self, symbol: str) -> Dict:
+    def calculate_metrics(self, symbol: str) -> dict:
         """
         Calculate aggregated metrics for a symbol.
 
@@ -160,7 +164,10 @@ def main():
     group_id = 'aggregator-consumer-group'
     bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
 
-    logger.info(f"Starting Aggregator Consumer")
+    # Start health check endpoint for K8s probes
+    start_health_server(port=8002)
+
+    logger.info("Starting Aggregator Consumer")
     logger.info(f"Input Topic: {input_topic}")
     logger.info(f"Output Topic: {output_topic}")
     logger.info(f"Consumer Group: {group_id}")

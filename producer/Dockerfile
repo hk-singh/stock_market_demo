@@ -12,7 +12,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first (for layer caching)
-COPY requirements.txt .
+COPY producer/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --user -r requirements.txt
@@ -27,14 +27,20 @@ WORKDIR /app
 COPY --from=builder /root/.local /root/.local
 
 # Copy application code
-COPY producer.py .
-COPY websocket_handler.py .
+COPY producer/producer.py .
+COPY producer/websocket_handler.py .
+
+# Copy shared module
+COPY shared/ ./shared/
 
 # Update PATH to use user-installed packages
 ENV PATH=/root/.local/bin:$PATH
 
 # Set Python to run in unbuffered mode (logs appear immediately)
 ENV PYTHONUNBUFFERED=1
+
+# Expose health check port
+EXPOSE 8000
 
 # Run the producer
 CMD ["python", "producer.py"]
