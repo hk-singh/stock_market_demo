@@ -1,13 +1,18 @@
+import json
 import os
 import signal
 import sys
-import json
-from kafka import KafkaConsumer
-from kafka.errors import KafkaError
-from dotenv import load_dotenv
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import logging
 from datetime import datetime
 from pathlib import Path
+
+from dotenv import load_dotenv
+from kafka import KafkaConsumer
+from kafka.errors import KafkaError
+
+from shared.healthcheck import start_health_server
 
 logging.basicConfig(
     level=logging.INFO,
@@ -88,7 +93,10 @@ def main():
     bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
     batch_size = 50  # Write to file every 50 messages
 
-    logger.info(f"Starting Storage Consumer")
+    # Start health check endpoint for K8s probes
+    start_health_server(port=8003)
+
+    logger.info("Starting Storage Consumer")
     logger.info(f"Topic: {topic}")
     logger.info(f"Consumer Group: {group_id}")
     logger.info(f"Batch Size: {batch_size}")

@@ -1,8 +1,9 @@
-import websocket
 import json
-import time
 import logging
-from typing import Callable, List
+import time
+from collections.abc import Callable
+
+import websocket
 
 logging.basicConfig(
     level=logging.INFO,
@@ -17,7 +18,7 @@ class FinnhubWebSocketClient:
     Handles connection, reconnection, and message processing.
     """
 
-    def __init__(self, api_key: str, symbols: List[str], on_message_callback: Callable):
+    def __init__(self, api_key: str, symbols: list[str], on_message_callback: Callable):
         """
         Initialise WebSocket client.
 
@@ -85,7 +86,7 @@ class FinnhubWebSocketClient:
 
     def connect(self):
         """Establish WebSocket connection."""
-        logger.info(f"Connecting to Finnhub WebSocket...")
+        logger.info("Connecting to Finnhub WebSocket...")
 
         self.ws = websocket.WebSocketApp(
             self.ws_url,

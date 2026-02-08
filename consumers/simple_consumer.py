@@ -1,12 +1,17 @@
+import json
 import os
 import signal
 import sys
-import json
-from kafka import KafkaConsumer
-from kafka.errors import KafkaError
-from dotenv import load_dotenv
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 import logging
 from datetime import datetime
+
+from dotenv import load_dotenv
+from kafka import KafkaConsumer
+from kafka.errors import KafkaError
+
+from shared.healthcheck import start_health_server
 
 logging.basicConfig(
     level=logging.INFO,
@@ -67,7 +72,6 @@ def process_message(message):
     topic = message.topic
     partition = message.partition
     offset = message.offset
-    key = message.key
     value = message.value
     timestamp = message.timestamp
 
@@ -103,7 +107,10 @@ def main():
     group_id = 'simple-consumer-group'
     bootstrap_servers = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
 
-    logger.info(f"Starting Simple Consumer")
+    # Start health check endpoint for K8s probes
+    start_health_server(port=8001)
+
+    logger.info("Starting Simple Consumer")
     logger.info(f"Topic: {topic}")
     logger.info(f"Consumer Group: {group_id}")
     logger.info(f"Bootstrap Servers: {bootstrap_servers}")

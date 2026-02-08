@@ -12,7 +12,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first (for layer caching)
-COPY requirements.txt .
+COPY consumers/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --user -r requirements.txt
@@ -27,9 +27,12 @@ WORKDIR /app
 COPY --from=builder /root/.local /root/.local
 
 # Copy application code
-COPY simple_consumer.py .
-COPY aggregator_consumer.py .
-COPY storage_consumer.py .
+COPY consumers/simple_consumer.py .
+COPY consumers/aggregator_consumer.py .
+COPY consumers/storage_consumer.py .
+
+# Copy shared module
+COPY shared/ ./shared/
 
 # Create data directory for storage consumer
 RUN mkdir -p /app/data
@@ -40,6 +43,8 @@ ENV PATH=/root/.local/bin:$PATH
 # Set Python to run in unbuffered mode
 ENV PYTHONUNBUFFERED=1
 
+# Expose health check ports
+EXPOSE 8001 8002 8003
+
 # Default command (can be overridden)
 CMD ["python", "simple_consumer.py"]
-

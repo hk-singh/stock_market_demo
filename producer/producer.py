@@ -1,12 +1,17 @@
+import json
 import os
 import signal
 import sys
-import json
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+import logging
+
 from dotenv import load_dotenv
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 from websocket_handler import FinnhubWebSocketClient
-import logging
+
+from shared.healthcheck import start_health_server
 
 logging.basicConfig(
     level=logging.INFO,
@@ -73,7 +78,7 @@ def handle_trade_message(trade_data):
     if kafka_producer:
         try:
             # Use symbol as key for partitioning (all trades for same symbol go to same partition)
-            future = kafka_producer.send(
+            kafka_producer.send(
                 topic='raw-market-data',
                 key=symbol,
                 value=trade_data
@@ -121,7 +126,10 @@ def main():
         'TSLA',  # Tesla
     ]
 
-    logger.info(f"Starting Finnhub WebSocket Producer")
+    # Start health check endpoint for K8s probes
+    start_health_server(port=8000)
+
+    logger.info("Starting Finnhub WebSocket Producer")
     logger.info(f"Kafka Bootstrap Servers: {kafka_bootstrap_servers}")
     logger.info(f"Tracking symbols: {', '.join(symbols)}")
 
