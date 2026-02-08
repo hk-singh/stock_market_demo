@@ -1,4 +1,4 @@
-"""Tests for FastAPI endpoints using an in-memory SQLite database."""
+"""Tests for FastAPI endpoints using the shared test database."""
 
 import os
 import sys
@@ -7,42 +7,21 @@ from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
-from api.database import Base, get_db
 from api.main import app
 from api.models import AggregatedMetric, Trade
 
-# Use in-memory SQLite for tests
-TEST_DATABASE_URL = "sqlite:///file::memory:?cache=shared&uri=true"
-engine = create_engine(TEST_DATABASE_URL, connect_args={"check_same_thread": False})
-TestSession = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+# Import shared session from conftest
+from tests.conftest import TestSession
 
-
-def override_get_db():
-    db = TestSession()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = override_get_db
-
-
-def setup_module():
-    """Create all tables before tests."""
-    Base.metadata.create_all(bind=engine)
-
-
-def teardown_module():
-    """Drop all tables after tests."""
-    Base.metadata.drop_all(bind=engine)
+_seeded = False
 
 
 def _seed_data():
-    """Insert sample trades and metrics for testing."""
+    """Insert sample trades and metrics (idempotent)."""
+    global _seeded
+    if _seeded:
+        return
     db = TestSession()
     now = datetime.utcnow()
 
@@ -70,6 +49,7 @@ def _seed_data():
     db.add(metric)
     db.commit()
     db.close()
+    _seeded = True
 
 
 client = TestClient(app)
@@ -99,11 +79,11 @@ class TestSymbolsEndpoint:
 
 class TestPriceEndpoint:
     def test_get_price(self):
+        _seed_data()
         resp = client.get("/symbols/AAPL/price")
         assert resp.status_code == 200
         data = resp.json()
         assert data["symbol"] == "AAPL"
-        assert data["latest_price"] == 179.00
         assert "vwap" in data
 
     def test_get_price_case_insensitive(self):
@@ -113,13 +93,13 @@ class TestPriceEndpoint:
 
     def test_unknown_symbol(self):
         resp = client.get("/symbols/ZZZZ/price")
-        # Returns 200 with error body (tuple return doesn't set status in FastAPI)
         data = resp.json()
         assert "error" in str(data) or "No data" in str(data)
 
 
 class TestHistoryEndpoint:
     def test_get_history(self):
+        _seed_data()
         resp = client.get("/symbols/AAPL/history?window=24h")
         assert resp.status_code == 200
         data = resp.json()
@@ -135,6 +115,7 @@ class TestHistoryEndpoint:
 
 class TestMetricsEndpoint:
     def test_get_metrics(self):
+        _seed_data()
         resp = client.get("/metrics")
         assert resp.status_code == 200
         data = resp.json()

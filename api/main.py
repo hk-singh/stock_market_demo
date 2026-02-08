@@ -14,6 +14,13 @@ from sqlalchemy.orm import Session
 
 from api.database import get_db
 from api.models import AggregatedMetric, Trade
+from api.portfolio_service import (
+    execute_paper_trade,
+    get_or_create_portfolio,
+    get_performance,
+    get_portfolio_summary,
+    get_trade_history,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -192,6 +199,61 @@ def get_metrics(db: Session = Depends(get_db)):
             for m in metrics
         ]
     }
+
+
+# --- Portfolio endpoints ---
+
+@app.post("/portfolio/init")
+def init_portfolio(
+    name: str = Query("Default"),
+    starting_cash: float = Query(100_000.0, ge=1),
+    db: Session = Depends(get_db),
+):
+    """Create or get the default portfolio."""
+    portfolio = get_or_create_portfolio(db)
+    return {
+        "portfolio_id": portfolio.id,
+        "name": portfolio.name,
+        "cash_balance": portfolio.cash_balance,
+        "starting_cash": portfolio.starting_cash,
+    }
+
+
+@app.post("/portfolio/trade")
+def post_trade(
+    symbol: str = Query(..., description="Stock symbol, e.g. AAPL"),
+    side: str = Query(..., description="BUY or SELL"),
+    shares: int = Query(..., ge=1, description="Number of shares"),
+    db: Session = Depends(get_db),
+):
+    """Execute a paper buy or sell at current market price."""
+    portfolio = get_or_create_portfolio(db)
+    result = execute_paper_trade(db, portfolio.id, symbol, side, shares)
+    return result
+
+
+@app.get("/portfolio")
+def get_portfolio(db: Session = Depends(get_db)):
+    """Get current portfolio: holdings, cash, total value."""
+    portfolio = get_or_create_portfolio(db)
+    return get_portfolio_summary(db, portfolio.id)
+
+
+@app.get("/portfolio/history")
+def get_portfolio_history(
+    limit: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """Get the trade log with P&L per trade."""
+    portfolio = get_or_create_portfolio(db)
+    return {"trades": get_trade_history(db, portfolio.id, limit)}
+
+
+@app.get("/portfolio/performance")
+def get_portfolio_performance(db: Session = Depends(get_db)):
+    """Get portfolio performance: returns, max drawdown, win rate."""
+    portfolio = get_or_create_portfolio(db)
+    return get_performance(db, portfolio.id)
 
 
 # --- WebSocket endpoint ---

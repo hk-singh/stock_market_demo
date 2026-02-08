@@ -39,14 +39,16 @@
 ## Milestone 2 — Paper Portfolio Engine
 *"The core of what the client actually wants"*
 
-- [ ] New service: `portfolio-service` (FastAPI)
+- [x] Portfolio endpoints added to FastAPI service:
+  - `POST /portfolio/init` — create/get portfolio
   - `POST /portfolio/trade` — execute a paper buy/sell at current market price
   - `GET /portfolio` — current holdings, cash balance, total value
   - `GET /portfolio/history` — trade log with P&L per trade
-  - `GET /portfolio/performance` — returns, Sharpe ratio, max drawdown
-- [ ] DB tables: `portfolios`, `positions`, `paper_trades`, `portfolio_snapshots`
-- [ ] Portfolio valuation consumer: subscribes to `aggregated-metrics`, recalculates portfolio value on every tick
-- [ ] Starting cash configurable (default $100k)
+  - `GET /portfolio/performance` — returns, max drawdown, win rate
+- [x] DB tables: `portfolios`, `positions`, `paper_trades`, `portfolio_snapshots`
+- [x] Portfolio valuation consumer: subscribes to `aggregated-metrics`, snapshots portfolio value every 60s
+- [x] Starting cash configurable (default $100k)
+- [x] 16 new tests (42 total): service logic + API endpoints
 
 **Deliverable**: A working paper trading system where you can buy/sell and track performance.
 
