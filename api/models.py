@@ -106,3 +106,58 @@ class PortfolioSnapshot(Base):
     snapshot_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, nullable=False
     )
+
+
+# --- Strategy & Alert models ---
+
+
+class StrategySignal(Base):
+    __tablename__ = "strategy_signals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    strategy_name: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    action: Mapped[str] = mapped_column(String(10), nullable=False)  # BUY, SELL, HOLD
+    reason: Mapped[str] = mapped_column(String(500), nullable=False)
+    strength: Mapped[float] = mapped_column(Float, nullable=False)
+    price: Mapped[float] = mapped_column(Float, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_signals_strategy_symbol", "strategy_name", "symbol"),
+    )
+
+
+class AlertRule(Base):
+    __tablename__ = "alert_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    condition: Mapped[str] = mapped_column(String(20), nullable=False)  # price_above, price_below, volume_above
+    threshold: Mapped[float] = mapped_column(Float, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Integer, nullable=False, default=1)  # SQLite compat: 1/0
+    triggered_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_triggered_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+
+class ActiveStrategy(Base):
+    """Tracks which strategies are enabled for which symbols."""
+    __tablename__ = "active_strategies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    strategy_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_active_strategy_symbol", "strategy_name", "symbol", unique=True),
+    )

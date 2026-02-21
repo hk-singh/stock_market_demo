@@ -239,6 +239,30 @@ services:
       timeout: 5s
       retries: 3
 
+  # Alerts consumer — evaluates strategies and publishes to price-alerts topic
+  alerts-consumer:
+    build:
+      context: .
+      dockerfile: api/Dockerfile
+    container_name: alerts-consumer
+    depends_on:
+      kafka:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/stockmarket
+    command: ["python", "-m", "api.alerts_consumer"]
+    networks:
+      - kafka-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8007/healthz')\""]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
 volumes:
   zookeeper-data:
   zookeeper-logs:

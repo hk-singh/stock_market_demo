@@ -13,7 +13,13 @@ from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from api.database import get_db
-from api.models import AggregatedMetric, Trade
+from api.models import (
+    ActiveStrategy,
+    AggregatedMetric,
+    AlertRule,
+    StrategySignal,
+    Trade,
+)
 from api.portfolio_service import (
     execute_paper_trade,
     get_or_create_portfolio,
@@ -21,6 +27,7 @@ from api.portfolio_service import (
     get_portfolio_summary,
     get_trade_history,
 )
+from api.strategy_engine import list_strategies
 
 logging.basicConfig(
     level=logging.INFO,
@@ -254,6 +261,176 @@ def get_portfolio_performance(db: Session = Depends(get_db)):
     """Get portfolio performance: returns, max drawdown, win rate."""
     portfolio = get_or_create_portfolio(db)
     return get_performance(db, portfolio.id)
+
+
+# --- Strategy & Alert endpoints ---
+
+@app.get("/strategies")
+def get_strategies(db: Session = Depends(get_db)):
+    """List all available strategies and their activation status."""
+    strategies = list_strategies()
+
+    # Enrich with activation info
+    for s in strategies:
+        active_rows = (
+            db.query(ActiveStrategy)
+            .filter(ActiveStrategy.strategy_name == s["name"], ActiveStrategy.is_active == 1)
+            .all()
+        )
+        s["active_symbols"] = [r.symbol for r in active_rows]
+
+    return {"strategies": strategies}
+
+
+@app.post("/strategies/activate")
+def activate_strategy(
+    strategy_name: str = Query(..., description="Strategy name, e.g. vwap_deviation"),
+    symbol: str = Query(..., description="Stock symbol, e.g. AAPL"),
+    active: bool = Query(True, description="Activate (true) or deactivate (false)"),
+    db: Session = Depends(get_db),
+):
+    """Activate or deactivate a strategy for a specific symbol."""
+    from api.strategy_engine import get_strategy
+
+    if not get_strategy(strategy_name):
+        return {"error": f"Unknown strategy: {strategy_name}"}
+
+    symbol = symbol.upper()
+    existing = (
+        db.query(ActiveStrategy)
+        .filter(
+            ActiveStrategy.strategy_name == strategy_name,
+            ActiveStrategy.symbol == symbol,
+        )
+        .first()
+    )
+
+    if existing:
+        existing.is_active = 1 if active else 0
+    else:
+        existing = ActiveStrategy(
+            strategy_name=strategy_name,
+            symbol=symbol,
+            is_active=1 if active else 0,
+            created_at=datetime.utcnow(),
+        )
+        db.add(existing)
+
+    db.commit()
+    return {
+        "strategy_name": strategy_name,
+        "symbol": symbol,
+        "is_active": active,
+    }
+
+
+@app.get("/signals")
+def get_signals(
+    strategy_name: str = Query(None, description="Filter by strategy name"),
+    symbol: str = Query(None, description="Filter by symbol"),
+    limit: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """Get recent strategy signals, optionally filtered."""
+    query = db.query(StrategySignal)
+
+    if strategy_name:
+        query = query.filter(StrategySignal.strategy_name == strategy_name)
+    if symbol:
+        query = query.filter(StrategySignal.symbol == symbol.upper())
+
+    signals = query.order_by(desc(StrategySignal.created_at)).limit(limit).all()
+
+    return {
+        "signals": [
+            {
+                "id": s.id,
+                "strategy_name": s.strategy_name,
+                "symbol": s.symbol,
+                "action": s.action,
+                "reason": s.reason,
+                "strength": s.strength,
+                "price": s.price,
+                "created_at": s.created_at.isoformat(),
+            }
+            for s in signals
+        ]
+    }
+
+
+@app.post("/alerts/rules")
+def create_alert_rule(
+    name: str = Query(..., description="Rule name"),
+    symbol: str = Query(..., description="Stock symbol"),
+    condition: str = Query(..., description="price_above, price_below, or volume_above"),
+    threshold: float = Query(..., description="Threshold value"),
+    db: Session = Depends(get_db),
+):
+    """Create a custom alert rule."""
+    valid_conditions = ("price_above", "price_below", "volume_above")
+    if condition not in valid_conditions:
+        return {"error": f"condition must be one of {valid_conditions}"}
+
+    rule = AlertRule(
+        name=name,
+        symbol=symbol.upper(),
+        condition=condition,
+        threshold=threshold,
+        is_active=1,
+        triggered_count=0,
+        created_at=datetime.utcnow(),
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+
+    return {
+        "rule_id": rule.id,
+        "name": rule.name,
+        "symbol": rule.symbol,
+        "condition": rule.condition,
+        "threshold": rule.threshold,
+        "is_active": True,
+    }
+
+
+@app.get("/alerts/rules")
+def get_alert_rules(
+    symbol: str = Query(None, description="Filter by symbol"),
+    db: Session = Depends(get_db),
+):
+    """List all alert rules."""
+    query = db.query(AlertRule)
+    if symbol:
+        query = query.filter(AlertRule.symbol == symbol.upper())
+
+    rules = query.order_by(desc(AlertRule.created_at)).all()
+    return {
+        "rules": [
+            {
+                "id": r.id,
+                "name": r.name,
+                "symbol": r.symbol,
+                "condition": r.condition,
+                "threshold": r.threshold,
+                "is_active": bool(r.is_active),
+                "triggered_count": r.triggered_count,
+                "last_triggered_at": r.last_triggered_at.isoformat() if r.last_triggered_at else None,
+            }
+            for r in rules
+        ]
+    }
+
+
+@app.delete("/alerts/rules/{rule_id}")
+def delete_alert_rule(rule_id: int, db: Session = Depends(get_db)):
+    """Delete an alert rule."""
+    rule = db.query(AlertRule).filter(AlertRule.id == rule_id).first()
+    if not rule:
+        return {"error": f"Rule {rule_id} not found"}
+    db.delete(rule)
+    db.commit()
+    return {"deleted": rule_id}
 
 
 # --- WebSocket endpoint ---

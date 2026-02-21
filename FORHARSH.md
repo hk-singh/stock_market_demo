@@ -76,9 +76,30 @@ Finnhub WebSocket API (live trades)
 
 - **`test_serialization.py`** — Verifies that trade and metrics messages survive a JSON encode/decode round-trip without data loss.
 
+- **`test_api.py`** — Tests all REST endpoints: health, symbols list, price lookup, history with windowing, aggregated metrics.
+
+- **`test_db_consumer.py`** — Tests the DB writer: inserting trades, inserting metrics, handling missing fields gracefully.
+
+- **`test_portfolio.py`** — 16 tests covering the paper portfolio: creating portfolios, buying, selling with P&L, insufficient cash/shares, summaries, trade history, performance metrics, snapshots. Plus 5 API endpoint tests.
+
+- **`test_strategy.py`** — 26 tests: unit tests for each of the 3 built-in strategies (VWAP deviation, MA crossover, volume spike), strategy registry tests, and API tests for strategy activation, signal querying, and alert rule CRUD.
+
+- **`conftest.py`** — Shared test setup. Uses a single in-memory SQLite DB shared across all test files to avoid cross-test isolation issues (see "Lessons Learned").
+
+### `api/` (continued — Strategy & Alerts, Milestone 3)
+
+- **`strategy_engine.py`** — The pluggable strategy framework. Defines a `Signal` dataclass (what a strategy emits) and a `Strategy` base class (what a strategy implements). Three built-in strategies:
+  - **VWAPDeviationStrategy** — Mean-reversion: buy when price drops >1% below VWAP, sell when >1% above. Strength scales with the magnitude of deviation.
+  - **MovingAverageCrossoverStrategy** — Classic MA crossover: tracks a short-term avg (from aggregated metrics) vs a long-term EMA. Emits BUY on bullish crossover (short crosses above long), SELL on bearish.
+  - **VolumeSpikeStrategy** — Detects when volume exceeds 2x the rolling average. The signal direction follows the price movement (spike + price up = BUY).
+
+  All strategies are registered in `BUILTIN_STRATEGIES` and discoverable via `list_strategies()` / `get_strategy()`.
+
+- **`alerts_consumer.py`** — A new Kafka consumer that reads `aggregated-metrics`, evaluates all active strategies for each symbol, saves emitted signals to the `strategy_signals` DB table, and publishes them to a `price-alerts` Kafka topic. Also evaluates custom alert rules (price above/below threshold, volume above threshold).
+
 ### Root Files
 
-- **`docker-compose.yml`** — The full local stack: Zookeeper, Kafka, Kafka UI, producer, and all 3 consumers. Build contexts point to the repo root so the `shared/` module is available. Every service has a health check.
+- **`docker-compose.yml`** — The full local stack: Zookeeper, Kafka, Kafka UI, producer, and all 3 consumers, plus postgres, db-consumer, API, valuation-consumer, and alerts-consumer. Build contexts point to the repo root so the `shared/` module is available. Every service has a health check.
 
 - **`create_topics.sh`** — Creates the 4 Kafka topics with proper partition counts and 7-day retention. Run this once after Kafka starts.
 
